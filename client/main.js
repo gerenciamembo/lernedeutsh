@@ -3,6 +3,15 @@ const state = {
     session: null,
 };
 
+let interactionLocked = false;
+const dragState = {
+    active: false,
+    startX: 0,
+    pointerId: null,
+    deltaX: 0,
+};
+const DRAG_THRESHOLD_RATIO = 0.28;
+
 const elements = {
     deckGrid: document.getElementById('deck-grid'),
     deckEmpty: document.getElementById('deck-empty'),
@@ -134,12 +143,18 @@ function renderDeckList() {
     elements.deckGrid.innerHTML = '';
 
     state.decks.forEach((deck) => {
+        const cardCountText = deck.cardCount === 1 ? '1 tarjeta' : `${deck.cardCount} tarjetas`;
+        const pendingPoints = typeof deck.pendingPoints === 'number' ? deck.pendingPoints : 0;
+        const pendingText = pendingPoints === 1 ? '1 punto pendiente' : `${pendingPoints} puntos pendientes`;
         const card = document.createElement('article');
         card.className = 'deck-card';
         card.innerHTML = `
             <div>
                 <h3>${deck.name}</h3>
-                <p>${deck.cardCount} tarjetas</p>
+                <div class="deck-stats">
+                    <span>${cardCountText}</span>
+                    <span>${pendingText}</span>
+                </div>
             </div>
             <div class="card-actions">
                 <button class="ghost" data-action="view" data-id="${deck.id}">👁️ Ver</button>
@@ -208,6 +223,7 @@ function renderSession() {
 
     elements.sessionTitle.textContent = session.deckName;
     updateSessionSubtitle();
+    resetCardPosition(true);
 
     const card = currentCard();
     if (!card) {
@@ -269,6 +285,7 @@ async function registerAnswer(delta) {
     if (!session || !card) return;
     elements.markCorrect.disabled = true;
     elements.markIncorrect.disabled = true;
+    interactionLocked = true;
     try {
         const data = await fetchJSON(`/api/decks/${session.deckId}/cards/${card.id}`, {
             method: 'PATCH',
@@ -284,28 +301,177 @@ async function registerAnswer(delta) {
         };
         replace(session.cards);
         replace(session.roundCards);
+        if (data.deck) {
+            const deckIndex = state.decks.findIndex((d) => d.id === data.deck.id);
+            if (deckIndex >= 0) {
+                state.decks[deckIndex] = { ...state.decks[deckIndex], ...data.deck };
+            }
+            renderDeckList();
+        }
         advanceSession();
+        interactionLocked = false;
     } catch (error) {
         alert(error.message);
         elements.markCorrect.disabled = false;
         elements.markIncorrect.disabled = false;
+        interactionLocked = false;
+        resetCardPosition(true);
     }
 }
 
 function exitSession() {
+    resetCardPosition(true);
+    interactionLocked = false;
+    dragState.active = false;
+    dragState.pointerId = null;
     state.session = null;
     switchView('list');
     loadDecks();
 }
 
+function resetCardPosition(immediate = false) {
+    const cardElement = elements.cardView;
+    if (!cardElement) return;
+    const applyReset = () => {
+        cardElement.style.transform = '';
+    };
+
+    if (immediate) {
+        cardElement.style.transition = 'none';
+        applyReset();
+        requestAnimationFrame(() => {
+            cardElement.style.transition = '';
+        });
+    } else {
+        cardElement.style.transition = 'transform 0.2s ease';
+        applyReset();
+        setTimeout(() => {
+            cardElement.style.transition = '';
+        }, 200);
+    }
+
+    cardElement.classList.remove('dragging', 'drag-left', 'drag-right');
+    dragState.deltaX = 0;
+}
+
+function triggerSwipe(direction) {
+    if (interactionLocked) return;
+    const cardElement = elements.cardView;
+    if (!cardElement || cardElement.classList.contains('hidden')) return;
+    if (!state.session || state.session.finished || !currentCard()) return;
+
+    interactionLocked = true;
+    const offset = cardElement.offsetWidth || 0;
+    const translateX = direction === 'right' ? offset : -offset;
+    const rotation = direction === 'right' ? 14 : -14;
+    cardElement.style.transition = 'transform 0.2s ease';
+    cardElement.classList.add(direction === 'right' ? 'drag-right' : 'drag-left');
+    cardElement.style.transform = `translateX(${translateX}px) rotate(${rotation}deg)`;
+
+    const delta = direction === 'right' ? 1 : -1;
+    dragState.deltaX = 0;
+    setTimeout(() => {
+        registerAnswer(delta);
+    }, 120);
+}
+
+function handleDragStart(event) {
+    if (interactionLocked || !currentCard()) return;
+    const cardElement = elements.cardView;
+    if (!cardElement) return;
+    dragState.active = true;
+    dragState.startX = event.clientX;
+    dragState.pointerId = event.pointerId;
+    dragState.deltaX = 0;
+    cardElement.classList.add('dragging');
+    cardElement.classList.remove('drag-left', 'drag-right');
+    cardElement.style.transition = 'none';
+    if (typeof cardElement.setPointerCapture === 'function') {
+        try {
+            cardElement.setPointerCapture(event.pointerId);
+        } catch (error) {
+            // ignore capture errors
+        }
+    }
+    event.preventDefault();
+}
+
+function handleDragMove(event) {
+    if (!dragState.active || event.pointerId !== dragState.pointerId) return;
+    const cardElement = elements.cardView;
+    if (!cardElement) return;
+    dragState.deltaX = event.clientX - dragState.startX;
+    const rotate = Math.max(-18, Math.min(18, dragState.deltaX / 12));
+    cardElement.style.transform = `translateX(${dragState.deltaX}px) rotate(${rotate}deg)`;
+    const threshold = (cardElement.offsetWidth || 0) * DRAG_THRESHOLD_RATIO;
+    if (dragState.deltaX > threshold) {
+        cardElement.classList.add('drag-right');
+        cardElement.classList.remove('drag-left');
+    } else if (dragState.deltaX < -threshold) {
+        cardElement.classList.add('drag-left');
+        cardElement.classList.remove('drag-right');
+    } else {
+        cardElement.classList.remove('drag-left', 'drag-right');
+    }
+}
+
+function handleDragEnd(event) {
+    if (!dragState.active || (event && event.pointerId !== dragState.pointerId)) return;
+    const cardElement = elements.cardView;
+    if (!cardElement) return;
+    if (typeof cardElement.releasePointerCapture === 'function' && dragState.pointerId !== null) {
+        try {
+            cardElement.releasePointerCapture(dragState.pointerId);
+        } catch (error) {
+            // ignore release errors
+        }
+    }
+    cardElement.classList.remove('dragging');
+    const threshold = (cardElement.offsetWidth || 0) * DRAG_THRESHOLD_RATIO;
+    const deltaX = dragState.deltaX;
+    dragState.active = false;
+    dragState.pointerId = null;
+
+    if (interactionLocked) {
+        resetCardPosition();
+        return;
+    }
+
+    if (deltaX > threshold) {
+        triggerSwipe('right');
+        return;
+    }
+    if (deltaX < -threshold) {
+        triggerSwipe('left');
+        return;
+    }
+    resetCardPosition();
+}
+
+function setupCardDrag() {
+    const cardElement = elements.cardView;
+    if (!cardElement) return;
+    cardElement.addEventListener('pointerdown', handleDragStart);
+    cardElement.addEventListener('pointermove', handleDragMove);
+    cardElement.addEventListener('pointerup', handleDragEnd);
+    cardElement.addEventListener('pointercancel', handleDragEnd);
+    cardElement.addEventListener('pointerleave', handleDragEnd);
+    cardElement.addEventListener('dragstart', (event) => event.preventDefault());
+}
+
 function setupEventListeners() {
+    setupCardDrag();
     elements.openDeckForm.addEventListener('click', () => toggleOverlay(true));
     elements.closeDeckForm.addEventListener('click', () => toggleOverlay(false));
     elements.cancelDeckForm.addEventListener('click', () => toggleOverlay(false));
     elements.deckGrid.addEventListener('click', handleDeckAction);
     elements.exitSession.addEventListener('click', exitSession);
-    elements.markCorrect.addEventListener('click', () => registerAnswer(1));
-    elements.markIncorrect.addEventListener('click', () => registerAnswer(-1));
+    elements.markCorrect.addEventListener('click', () => {
+        if (!interactionLocked) triggerSwipe('right');
+    });
+    elements.markIncorrect.addEventListener('click', () => {
+        if (!interactionLocked) triggerSwipe('left');
+    });
 
     if (elements.themeToggle) {
         elements.themeToggle.addEventListener('click', () => {

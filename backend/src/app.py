@@ -5,6 +5,7 @@ import sys
 import uuid
 import zipfile
 from dataclasses import dataclass
+from datetime import datetime
 from email.message import EmailMessage
 from email.parser import BytesParser
 from email.policy import default
@@ -19,6 +20,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 CLIENT_DIR = BASE_DIR.parent / "client"
 DATA_DIR = BASE_DIR / "data"
 DB_PATH = DATA_DIR / "db.json"
+BACKUP_DIR = DATA_DIR / "backups"
 
 
 def ensure_database() -> None:
@@ -33,11 +35,37 @@ def read_database() -> Dict[str, Any]:
         return json.load(fh)
 
 
+def backup_database() -> None:
+    ensure_database()
+    if not DB_PATH.exists():
+        return
+
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    backup_path = BACKUP_DIR / f"db-{timestamp}.json"
+
+    try:
+        backup_path.write_bytes(DB_PATH.read_bytes())
+    except OSError:  # pragma: no cover - defensive guard
+        return
+
+    backups = sorted(BACKUP_DIR.glob("db-*.json"))
+    max_backups = 10
+    if len(backups) > max_backups:
+        for old in backups[:-max_backups]:
+            try:
+                old.unlink()
+            except OSError:
+                continue
+
+
 def write_database(data: Dict[str, Any]) -> None:
     ensure_database()
     tmp_path = DB_PATH.with_suffix(".tmp")
     with tmp_path.open("w", encoding="utf-8") as fh:
         json.dump(data, fh, ensure_ascii=False, indent=2)
+    if DB_PATH.exists():
+        backup_database()
     tmp_path.replace(DB_PATH)
 
 
@@ -56,6 +84,19 @@ def find_deck(deck_id: str) -> Tuple[Optional[Dict[str, Any]], List[Dict[str, An
         if deck["id"] == deck_id:
             return deck, decks
     return None, decks
+
+
+def calculate_pending_points(deck: Dict[str, Any]) -> int:
+    cards = deck.get("cards", [])
+    total = 0
+    for card in cards:
+        try:
+            score = int(card.get("aciertos", 0))
+        except (TypeError, ValueError):
+            score = 0
+        if score < 0:
+            total += -score
+    return total
 
 
 SPREADSHEET_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
@@ -468,6 +509,7 @@ class DeckHandler(SimpleHTTPRequestHandler):
                     "id": deck["id"],
                     "name": deck["name"],
                     "cardCount": len(deck.get("cards", [])),
+                    "pendingPoints": calculate_pending_points(deck),
                 }
                 for deck in decks
             ]
@@ -530,6 +572,7 @@ class DeckHandler(SimpleHTTPRequestHandler):
                 "id": deck["id"],
                 "name": deck["name"],
                 "cardCount": len(cards),
+                "pendingPoints": calculate_pending_points(deck),
             },
         }, status=201)
 
@@ -575,7 +618,13 @@ class DeckHandler(SimpleHTTPRequestHandler):
 
         card["aciertos"] += int(delta)
         save_decks(decks)
-        self.send_json({"card": card})
+        updated_deck = {
+            "id": deck["id"],
+            "name": deck["name"],
+            "cardCount": len(deck.get("cards", [])),
+            "pendingPoints": calculate_pending_points(deck),
+        }
+        self.send_json({"card": card, "deck": updated_deck})
 
 
 def run_server(host: str = "0.0.0.0", port: int = 8000) -> None:
