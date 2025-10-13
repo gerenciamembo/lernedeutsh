@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Entrenador de Mazos</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="layout">
+        <header class="top-bar">
+            <div class="brand">
+                <span class="brand-icon">🃏</span>
+                <div>
+                    <h1>Entrenador de Mazos</h1>
+                    <p>Organiza tus tarjetas y repásalas con un flujo inteligente</p>
+                </div>
+            </div>
+            <button class="primary" id="open-deck-form">Agregar mazo</button>
+        </header>
+
+        <main class="content">
+            <section id="deck-list-view" class="panel active">
+                <div class="panel-header">
+                    <h2>Tus mazos</h2>
+                    <p>Sube un archivo JSON o Excel (.xlsx) donde cada fila represente una tarjeta con pares clave/valor.</p>
+                </div>
+                <div id="deck-empty" class="empty-state hidden">
+                    <div class="empty-icon">📂</div>
+                    <h3>No hay mazos todavía</h3>
+                    <p>Comienza creando uno nuevo con el botón “Agregar mazo”.</p>
+                </div>
+                <div id="deck-grid" class="deck-grid"></div>
+            </section>
+
+            <section id="deck-session-view" class="panel">
+                <div class="session-header">
+                    <button class="ghost" id="exit-session">← Volver</button>
+                    <div class="session-info">
+                        <h2 id="session-title">Mazo</h2>
+                        <p id="session-subtitle"></p>
+                    </div>
+                </div>
+                <div id="session-body" class="session-body">
+                    <div class="card" id="card-view">
+                        <div class="card-meta">
+                            <span id="card-step"></span>
+                            <span id="card-score"></span>
+                        </div>
+                        <div id="card-content" class="card-content"></div>
+                    </div>
+                    <div class="session-actions">
+                        <button class="danger" id="mark-incorrect">✕ No entendí</button>
+                        <button class="success" id="mark-correct">✓ Comprendido</button>
+                    </div>
+                    <div id="session-message" class="session-message hidden"></div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <div id="deck-form-overlay" class="overlay hidden" role="dialog" aria-modal="true">
+        <div class="overlay-content">
+            <div class="overlay-header">
+                <h2>Nuevo mazo</h2>
+                <button id="close-deck-form" class="ghost" aria-label="Cerrar">✕</button>
+            </div>
+            <form id="deck-form" class="form">
+                <label class="form-field">
+                    <span>Nombre del mazo</span>
+                    <input type="text" name="name" placeholder="Ej. Vocabulario básico" required>
+                </label>
+                <label class="form-field">
+                    <span>Archivo de tarjetas (JSON o Excel)</span>
+                    <input type="file" name="file" accept="application/json,.json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx" required>
+                    <small>Sube un archivo JSON con un arreglo de objetos o un Excel (.xlsx) con encabezados en la primera fila.</small>
+                </label>
+                <div class="form-actions">
+                    <button type="button" class="ghost" id="cancel-deck-form">Cancelar</button>
+                    <button type="submit" class="primary">Guardar mazo</button>
+                </div>
+                <p class="form-feedback" id="deck-form-feedback"></p>
+            </form>
+        </div>
+    </div>
+
+    <script src="main.js" type="module"></script>
+</body>
+</html>
