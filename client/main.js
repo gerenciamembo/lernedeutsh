@@ -8,6 +8,7 @@ const elements = {
     deckEmpty: document.getElementById('deck-empty'),
     deckListView: document.getElementById('deck-list-view'),
     deckSessionView: document.getElementById('deck-session-view'),
+    themeToggle: document.getElementById('theme-toggle'),
     deckFormOverlay: document.getElementById('deck-form-overlay'),
     deckForm: document.getElementById('deck-form'),
     deckFormFeedback: document.getElementById('deck-form-feedback'),
@@ -27,6 +28,66 @@ const elements = {
     markCorrect: document.getElementById('mark-correct'),
     markIncorrect: document.getElementById('mark-incorrect'),
 };
+
+const THEME_STORAGE_KEY = 'theme-preference';
+
+function getStoredTheme() {
+    try {
+        const stored = localStorage.getItem(THEME_STORAGE_KEY);
+        return stored === 'light' || stored === 'dark' ? stored : null;
+    } catch (error) {
+        return null;
+    }
+}
+
+function storeTheme(theme) {
+    try {
+        const normalized = theme === 'light' ? 'light' : 'dark';
+        localStorage.setItem(THEME_STORAGE_KEY, normalized);
+    } catch (error) {
+        // ignore storage errors
+    }
+}
+
+function updateThemeToggle(theme) {
+    if (!elements.themeToggle) return;
+    const nextTheme = theme === 'dark' ? 'light' : 'dark';
+    const labels = {
+        light: '☀️ Modo claro',
+        dark: '🌙 Modo oscuro',
+    };
+    const label = labels[nextTheme];
+    const description = `Cambiar a modo ${nextTheme === 'dark' ? 'oscuro' : 'claro'}`;
+    elements.themeToggle.textContent = label;
+    elements.themeToggle.setAttribute('aria-label', description);
+    elements.themeToggle.setAttribute('title', description);
+}
+
+function applyTheme(theme) {
+    const normalized = theme === 'light' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = normalized;
+    updateThemeToggle(normalized);
+}
+
+function initTheme() {
+    const stored = getStoredTheme();
+    const systemPreference = window.matchMedia('(prefers-color-scheme: dark)');
+    const theme = stored || (systemPreference.matches ? 'dark' : 'light');
+    applyTheme(theme);
+
+    if (!stored) {
+        const handleChange = (event) => {
+            if (!getStoredTheme()) {
+                applyTheme(event.matches ? 'dark' : 'light');
+            }
+        };
+        if (typeof systemPreference.addEventListener === 'function') {
+            systemPreference.addEventListener('change', handleChange);
+        } else if (typeof systemPreference.addListener === 'function') {
+            systemPreference.addListener(handleChange);
+        }
+    }
+}
 
 function toggleOverlay(open) {
     elements.deckFormOverlay.classList.toggle('hidden', !open);
@@ -246,6 +307,15 @@ function setupEventListeners() {
     elements.markCorrect.addEventListener('click', () => registerAnswer(1));
     elements.markIncorrect.addEventListener('click', () => registerAnswer(-1));
 
+    if (elements.themeToggle) {
+        elements.themeToggle.addEventListener('click', () => {
+            const current = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+            const next = current === 'dark' ? 'light' : 'dark';
+            applyTheme(next);
+            storeTheme(next);
+        });
+    }
+
     elements.deckForm.addEventListener('submit', async (event) => {
         event.preventDefault();
         const formData = new FormData(elements.deckForm);
@@ -266,6 +336,7 @@ function setupEventListeners() {
 }
 
 function init() {
+    initTheme();
     setupEventListeners();
     loadDecks().catch((error) => {
         elements.deckGrid.innerHTML = `<p>Error al cargar mazos: ${error.message}</p>`;

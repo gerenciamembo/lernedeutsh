@@ -4,6 +4,25 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Entrenador de Mazos</title>
+    <script>
+        (function () {
+            const storageKey = 'theme-preference';
+            let theme = 'dark';
+            try {
+                const stored = localStorage.getItem(storageKey);
+                if (stored) {
+                    theme = stored;
+                } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                    theme = 'dark';
+                } else {
+                    theme = 'light';
+                }
+            } catch (error) {
+                theme = 'dark';
+            }
+            document.documentElement.dataset.theme = theme;
+        }());
+    </script>
     <link rel="stylesheet" href="styles.css">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -18,7 +37,10 @@
                     <p>Organiza tus tarjetas y repásalas con un flujo inteligente</p>
                 </div>
             </div>
-            <button class="primary" id="open-deck-form">Agregar mazo</button>
+            <div class="top-bar-actions">
+                <button class="ghost" type="button" id="theme-toggle" aria-label="Cambiar tema" title="Cambiar tema">Modo oscuro</button>
+                <button class="primary" id="open-deck-form">Agregar mazo</button>
+            </div>
         </header>
 
         <main class="content">
