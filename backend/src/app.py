@@ -1,14 +1,17 @@
-import cgi
 import json
 import os
 import re
 import sys
 import uuid
 import zipfile
+from dataclasses import dataclass
+from email.message import EmailMessage
+from email.parser import BytesParser
+from email.policy import default
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 from urllib.parse import urlparse
 import xml.etree.ElementTree as ET
 
@@ -271,7 +274,102 @@ def parse_xlsx_cards(raw: bytes) -> List[Dict[str, Any]]:
         return cards
 
 
-def parse_cards_from_file(file_item: cgi.FieldStorage) -> List[Dict[str, Any]]:
+@dataclass
+class TextField:
+    name: str
+    value: str
+
+
+class FileField:
+    def __init__(
+        self,
+        name: str,
+        filename: str,
+        data: bytes,
+        content_type: str,
+        headers: Optional[Dict[str, str]] = None,
+    ) -> None:
+        self.name = name
+        self.filename = filename
+        self.type = content_type
+        self.headers = headers or {}
+        self.value = data
+        self.file = BytesIO(data)
+
+
+MultipartField = Union[TextField, FileField]
+
+
+class MultipartForm:
+    def __init__(self) -> None:
+        self._fields: Dict[str, List[MultipartField]] = {}
+
+    def add_field(self, name: str, field: MultipartField) -> None:
+        self._fields.setdefault(name, []).append(field)
+
+    def getfirst(self, name: str, default: Optional[str] = None) -> Optional[str]:
+        fields = self._fields.get(name)
+        if not fields:
+            return default
+        field = fields[0]
+        if isinstance(field, TextField):
+            return field.value
+        return default
+
+    def __contains__(self, name: object) -> bool:
+        return isinstance(name, str) and name in self._fields and bool(self._fields[name])
+
+    def __getitem__(self, name: str) -> MultipartField:
+        fields = self._fields.get(name)
+        if not fields:
+            raise KeyError(name)
+        return fields[0]
+
+
+def _parse_multipart_form_data(body: bytes, content_type: str) -> MultipartForm:
+    header_bytes = f"Content-Type: {content_type}\r\n\r\n".encode("utf-8")
+    try:
+        message: EmailMessage = BytesParser(policy=default).parsebytes(header_bytes + body)
+    except Exception as exc:  # pragma: no cover - defensive
+        raise ValueError("No se pudo interpretar el formulario enviado") from exc
+
+    if not message.is_multipart():
+        raise ValueError("El cuerpo debe ser multipart/form-data válido")
+
+    form = MultipartForm()
+    for part in message.iter_parts():
+        if part.get_content_disposition() != "form-data":
+            continue
+        name = part.get_param("name", header="content-disposition")
+        if not name:
+            continue
+        filename = part.get_filename()
+        payload = part.get_payload(decode=True) or b""
+        headers = {key: value for key, value in part.items()}
+        if filename:
+            form.add_field(
+                name,
+                FileField(
+                    name=name,
+                    filename=filename,
+                    data=payload,
+                    content_type=part.get_content_type(),
+                    headers=headers,
+                ),
+            )
+            continue
+
+        charset = part.get_content_charset() or "utf-8"
+        try:
+            text = payload.decode(charset, errors="replace")
+        except LookupError:
+            text = payload.decode("utf-8", errors="replace")
+        form.add_field(name, TextField(name=name, value=text))
+
+    return form
+
+
+def parse_cards_from_file(file_item: FileField) -> List[Dict[str, Any]]:
     try:
         raw = file_item.file.read()
     except Exception as exc:  # pragma: no cover - defensive
@@ -399,13 +497,11 @@ class DeckHandler(SimpleHTTPRequestHandler):
             return
 
         body = self.read_body()
-        environ = {
-            "REQUEST_METHOD": "POST",
-            "CONTENT_TYPE": content_type,
-            "CONTENT_LENGTH": str(len(body)),
-        }
-        fp = BytesIO(body)
-        form = cgi.FieldStorage(fp=fp, headers=self.headers, environ=environ)
+        try:
+            form = _parse_multipart_form_data(body, content_type)
+        except ValueError as exc:
+            self.send_error_json(400, str(exc))
+            return
 
         name_field = form.getfirst("name")
         file_field = form["file"] if "file" in form else None
