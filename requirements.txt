@@ -1,0 +1,1 @@
+# No external dependencies required; Render/Railway expect this file.
