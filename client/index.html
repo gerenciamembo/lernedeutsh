@@ -23,6 +23,19 @@
             document.documentElement.dataset.theme = theme;
         }());
     </script>
+    <script>
+        (function () {
+            const storageKey = 'language-preference';
+            try {
+                const stored = localStorage.getItem(storageKey);
+                if (stored === 'es' || stored === 'en') {
+                    document.documentElement.lang = stored;
+                }
+            } catch (error) {
+                document.documentElement.lang = 'es';
+            }
+        }());
+    </script>
     <link rel="stylesheet" href="styles.css">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -33,33 +46,34 @@
             <div class="brand">
                 <span class="brand-icon">🃏</span>
                 <div>
-                    <h1>Entrenador de Mazos</h1>
-                    <p>Organiza tus tarjetas y repásalas con un flujo inteligente</p>
+                    <h1 data-i18n="app.title">Entrenador de Mazos</h1>
+                    <p data-i18n="app.tagline">Organiza tus tarjetas y repásalas con un flujo inteligente</p>
                 </div>
             </div>
             <div class="top-bar-actions">
+                <button class="ghost" type="button" id="language-toggle" aria-label="Cambiar idioma" title="Cambiar idioma">🇪🇸</button>
                 <button class="ghost" type="button" id="theme-toggle" aria-label="Cambiar tema" title="Cambiar tema">Modo oscuro</button>
-                <button class="primary" id="open-deck-form">Agregar mazo</button>
+                <button class="primary" id="open-deck-form" data-i18n="actions.addDeck">Agregar mazo</button>
             </div>
         </header>
 
         <main class="content">
             <section id="deck-list-view" class="panel active">
                 <div class="panel-header">
-                    <h2>Tus mazos</h2>
-                    <p>Sube un archivo JSON o Excel (.xlsx) donde cada fila represente una tarjeta con pares clave/valor.</p>
+                    <h2 data-i18n="deck.listTitle">Tus mazos</h2>
+                    <p data-i18n="deck.uploadHint">Sube un archivo JSON o Excel (.xlsx) donde cada fila represente una tarjeta con pares clave/valor.</p>
                 </div>
                 <div id="deck-empty" class="empty-state hidden">
                     <div class="empty-icon">📂</div>
-                    <h3>No hay mazos todavía</h3>
-                    <p>Comienza creando uno nuevo con el botón “Agregar mazo”.</p>
+                    <h3 data-i18n="deck.emptyTitle">No hay mazos todavía</h3>
+                    <p data-i18n="deck.emptyDescription">Comienza creando uno nuevo con el botón “Agregar mazo”.</p>
                 </div>
                 <div id="deck-grid" class="deck-grid"></div>
             </section>
 
             <section id="deck-session-view" class="panel">
                 <div class="session-header">
-                    <button class="ghost" id="exit-session">← Volver</button>
+                    <button class="ghost" id="exit-session" data-i18n="session.exit">← Volver</button>
                     <div class="session-info">
                         <h2 id="session-title">Mazo</h2>
                         <p id="session-subtitle"></p>
@@ -74,8 +88,8 @@
                         <div id="card-content" class="card-content"></div>
                     </div>
                     <div class="session-actions">
-                        <button class="danger" id="mark-incorrect">✕ No entendí</button>
-                        <button class="success" id="mark-correct">✓ Comprendido</button>
+                    <button class="danger" id="mark-incorrect" data-i18n="session.markIncorrect">✕ No entendí</button>
+                    <button class="success" id="mark-correct" data-i18n="session.markCorrect">✓ Comprendido</button>
                     </div>
                     <div id="session-message" class="session-message hidden"></div>
                 </div>
@@ -86,22 +100,22 @@
     <div id="deck-form-overlay" class="overlay hidden" role="dialog" aria-modal="true">
         <div class="overlay-content">
             <div class="overlay-header">
-                <h2>Nuevo mazo</h2>
-                <button id="close-deck-form" class="ghost" aria-label="Cerrar">✕</button>
+                <h2 data-i18n="deckForm.title">Nuevo mazo</h2>
+                <button id="close-deck-form" class="ghost" aria-label="Cerrar" data-i18n-attr-aria-label="deckForm.close">✕</button>
             </div>
             <form id="deck-form" class="form">
                 <label class="form-field">
-                    <span>Nombre del mazo</span>
-                    <input type="text" name="name" placeholder="Ej. Vocabulario básico" required>
+                    <span data-i18n="deckForm.nameLabel">Nombre del mazo</span>
+                    <input type="text" name="name" placeholder="Ej. Vocabulario básico" required data-i18n-attr-placeholder="deckForm.namePlaceholder">
                 </label>
                 <label class="form-field">
-                    <span>Archivo de tarjetas (JSON o Excel)</span>
+                    <span data-i18n="deckForm.fileLabel">Archivo de tarjetas (JSON o Excel)</span>
                     <input type="file" name="file" accept="application/json,.json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx" required>
-                    <small>Sube un archivo JSON con un arreglo de objetos o un Excel (.xlsx) con encabezados en la primera fila.</small>
+                    <small data-i18n="deckForm.fileHelp">Sube un archivo JSON con un arreglo de objetos o un Excel (.xlsx) con encabezados en la primera fila.</small>
                 </label>
                 <div class="form-actions">
-                    <button type="button" class="ghost" id="cancel-deck-form">Cancelar</button>
-                    <button type="submit" class="primary">Guardar mazo</button>
+                    <button type="button" class="ghost" id="cancel-deck-form" data-i18n="deckForm.cancel">Cancelar</button>
+                    <button type="submit" class="primary" data-i18n="deckForm.submit">Guardar mazo</button>
                 </div>
                 <p class="form-feedback" id="deck-form-feedback"></p>
             </form>
