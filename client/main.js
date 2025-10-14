@@ -1,6 +1,7 @@
 const state = {
     decks: [],
     session: null,
+    language: 'es',
 };
 
 let interactionLocked = false;
@@ -18,6 +19,7 @@ const elements = {
     deckListView: document.getElementById('deck-list-view'),
     deckSessionView: document.getElementById('deck-session-view'),
     themeToggle: document.getElementById('theme-toggle'),
+    languageToggle: document.getElementById('language-toggle'),
     deckFormOverlay: document.getElementById('deck-form-overlay'),
     deckForm: document.getElementById('deck-form'),
     deckFormFeedback: document.getElementById('deck-form-feedback'),
@@ -38,7 +40,275 @@ const elements = {
     markIncorrect: document.getElementById('mark-incorrect'),
 };
 
+const translations = {
+    es: {
+        app: {
+            title: 'Entrenador de Mazos',
+            tagline: 'Organiza tus tarjetas y repásalas con un flujo inteligente',
+        },
+        actions: {
+            addDeck: 'Agregar mazo',
+        },
+        deck: {
+            listTitle: 'Tus mazos',
+            uploadHint:
+                'Sube un archivo JSON o Excel (.xlsx) donde cada fila represente una tarjeta con pares clave/valor.',
+            emptyTitle: 'No hay mazos todavía',
+            emptyDescription: 'Comienza creando uno nuevo con el botón “Agregar mazo”.',
+            cardCount: ({ count }) => (count === 1 ? '1 tarjeta' : `${count} tarjetas`),
+            pendingPoints: ({ count }) => (count === 1 ? '1 punto pendiente' : `${count} puntos pendientes`),
+            loadError: ({ message }) => `Error al cargar mazos: ${message}`,
+            actions: {
+                view: '👁️ Ver',
+                delete: 'Eliminar',
+                confirmDelete: '¿Eliminar este mazo? Esta acción no se puede deshacer.',
+            },
+        },
+        session: {
+            exit: '← Volver',
+            negativeReview: ({ count }) => `Revisión de negativos (${count})`,
+            roundLabel: ({ round }) => `Recorrido ${round}`,
+            completed: '¡Recorrido completado! No quedan tarjetas pendientes.',
+            allPositive: '¡Bien hecho! Todas las tarjetas están en positivo.',
+            step: ({ index, total }) => `Tarjeta ${index} de ${total}`,
+            score: ({ score }) => `Aciertos: ${score}`,
+            markIncorrect: '✕ No entendí',
+            markCorrect: '✓ Comprendido',
+        },
+        deckForm: {
+            title: 'Nuevo mazo',
+            close: 'Cerrar',
+            nameLabel: 'Nombre del mazo',
+            namePlaceholder: 'Ej. Vocabulario básico',
+            fileLabel: 'Archivo de tarjetas (JSON o Excel)',
+            fileHelp:
+                'Sube un archivo JSON con un arreglo de objetos o un Excel (.xlsx) con encabezados en la primera fila.',
+            cancel: 'Cancelar',
+            submit: 'Guardar mazo',
+            uploading: 'Subiendo mazo...',
+            success: 'Mazo creado con éxito',
+        },
+        theme: {
+            toggle: {
+                light: '☀️ Modo claro',
+                dark: '🌙 Modo oscuro',
+            },
+            description: {
+                light: 'Cambiar a modo claro',
+                dark: 'Cambiar a modo oscuro',
+            },
+        },
+        errors: {
+            httpStatus: ({ status }) => `Error ${status}`,
+        },
+        language: {
+            flag: {
+                es: '🇪🇸',
+                en: '🇺🇸',
+            },
+            name: {
+                es: 'español',
+                en: 'inglés',
+            },
+            switch: ({ language }) => `Cambiar idioma a ${language}`,
+        },
+    },
+    en: {
+        app: {
+            title: 'Deck Trainer',
+            tagline: 'Organize your cards and review them with a smart flow',
+        },
+        actions: {
+            addDeck: 'Add deck',
+        },
+        deck: {
+            listTitle: 'Your decks',
+            uploadHint:
+                'Upload a JSON or Excel (.xlsx) file where each row represents a card with key/value pairs.',
+            emptyTitle: 'No decks yet',
+            emptyDescription: 'Create a new one using the “Add deck” button.',
+            cardCount: ({ count }) => (count === 1 ? '1 card' : `${count} cards`),
+            pendingPoints: ({ count }) => (count === 1 ? '1 pending point' : `${count} pending points`),
+            loadError: ({ message }) => `Error loading decks: ${message}`,
+            actions: {
+                view: '👁️ View',
+                delete: 'Delete',
+                confirmDelete: 'Delete this deck? This action cannot be undone.',
+            },
+        },
+        session: {
+            exit: '← Back',
+            negativeReview: ({ count }) => `Negative review (${count})`,
+            roundLabel: ({ round }) => `Round ${round}`,
+            completed: 'Run completed! No cards pending.',
+            allPositive: 'Great job! All cards are positive.',
+            step: ({ index, total }) => `Card ${index} of ${total}`,
+            score: ({ score }) => `Correct answers: ${score}`,
+            markIncorrect: '✕ Didn’t get it',
+            markCorrect: '✓ Got it',
+        },
+        deckForm: {
+            title: 'New deck',
+            close: 'Close',
+            nameLabel: 'Deck name',
+            namePlaceholder: 'E.g. Basic vocabulary',
+            fileLabel: 'Card file (JSON or Excel)',
+            fileHelp: 'Upload a JSON array of objects or an Excel (.xlsx) with headers in the first row.',
+            cancel: 'Cancel',
+            submit: 'Save deck',
+            uploading: 'Uploading deck...',
+            success: 'Deck created successfully',
+        },
+        theme: {
+            toggle: {
+                light: '☀️ Light mode',
+                dark: '🌙 Dark mode',
+            },
+            description: {
+                light: 'Switch to light mode',
+                dark: 'Switch to dark mode',
+            },
+        },
+        errors: {
+            httpStatus: ({ status }) => `Error ${status}`,
+        },
+        language: {
+            flag: {
+                es: '🇪🇸',
+                en: '🇺🇸',
+            },
+            name: {
+                es: 'Spanish',
+                en: 'English',
+            },
+            switch: ({ language }) => `Switch language to ${language}`,
+        },
+    },
+};
+
+const LANGUAGE_STORAGE_KEY = 'language-preference';
 const THEME_STORAGE_KEY = 'theme-preference';
+
+function getStoredLanguage() {
+    try {
+        const stored = localStorage.getItem(LANGUAGE_STORAGE_KEY);
+        return stored === 'es' || stored === 'en' ? stored : null;
+    } catch (error) {
+        return null;
+    }
+}
+
+function storeLanguage(language) {
+    try {
+        const normalized = language === 'en' ? 'en' : 'es';
+        localStorage.setItem(LANGUAGE_STORAGE_KEY, normalized);
+    } catch (error) {
+        // ignore storage errors
+    }
+}
+
+function getTranslationValue(language, pathParts) {
+    const source = translations[language];
+    if (!source) return undefined;
+    return pathParts.reduce((current, part) => {
+        if (current && typeof current === 'object' && part in current) {
+            return current[part];
+        }
+        return undefined;
+    }, source);
+}
+
+function formatString(template, params = {}) {
+    return template.replace(/\{(.*?)\}/g, (match, key) => {
+        const trimmed = key.trim();
+        if (Object.prototype.hasOwnProperty.call(params, trimmed)) {
+            return params[trimmed];
+        }
+        return match;
+    });
+}
+
+function translate(key, params = {}) {
+    const path = key.split('.');
+    let value = getTranslationValue(state.language, path);
+    if (value === undefined) {
+        value = getTranslationValue('es', path);
+    }
+    if (value === undefined) {
+        return key;
+    }
+    if (typeof value === 'function') {
+        return value(params || {});
+    }
+    if (typeof value === 'string') {
+        return formatString(value, params || {});
+    }
+    return value;
+}
+
+function applyI18nAttributes(element) {
+    Object.entries(element.dataset).forEach(([name, key]) => {
+        if (!name.startsWith('i18nAttr')) return;
+        const attributeName = name.slice('i18nAttr'.length);
+        if (!attributeName) return;
+        const normalized = attributeName.replace(/([A-Z])/g, '-$1').toLowerCase();
+        const translation = translate(key);
+        if (translation !== undefined) {
+            element.setAttribute(normalized, translation);
+        }
+    });
+}
+
+function applyStaticTranslations() {
+    document.querySelectorAll('[data-i18n]').forEach((element) => {
+        const key = element.dataset.i18n;
+        if (!key) return;
+        const translation = translate(key);
+        if (translation === undefined) return;
+        if (element.dataset.i18nType === 'html') {
+            element.innerHTML = translation;
+        } else {
+            element.textContent = translation;
+        }
+        applyI18nAttributes(element);
+    });
+
+    document
+        .querySelectorAll('[data-i18n-attr-aria-label],[data-i18n-attr-title],[data-i18n-attr-placeholder]')
+        .forEach((element) => {
+            applyI18nAttributes(element);
+        });
+}
+
+function updateLanguageToggle() {
+    if (!elements.languageToggle) return;
+    const currentLanguage = state.language === 'en' ? 'en' : 'es';
+    const nextLanguage = currentLanguage === 'es' ? 'en' : 'es';
+    const flag = translate(`language.flag.${currentLanguage}`);
+    const nextName = translate(`language.name.${nextLanguage}`);
+    const description = translate('language.switch', { language: nextName });
+    elements.languageToggle.textContent = flag;
+    elements.languageToggle.setAttribute('aria-label', description);
+    elements.languageToggle.setAttribute('title', description);
+}
+
+function applyLanguage(language) {
+    const normalized = translations[language] ? language : 'es';
+    state.language = normalized;
+    storeLanguage(normalized);
+    document.documentElement.lang = normalized;
+    document.title = translate('app.title');
+    applyStaticTranslations();
+    updateLanguageToggle();
+    const currentTheme = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+    updateThemeToggle(currentTheme);
+    renderDeckList();
+    if (state.session) {
+        renderSession();
+    } else {
+        updateSessionSubtitle();
+    }
+}
 
 function getStoredTheme() {
     try {
@@ -61,12 +331,8 @@ function storeTheme(theme) {
 function updateThemeToggle(theme) {
     if (!elements.themeToggle) return;
     const nextTheme = theme === 'dark' ? 'light' : 'dark';
-    const labels = {
-        light: '☀️ Modo claro',
-        dark: '🌙 Modo oscuro',
-    };
-    const label = labels[nextTheme];
-    const description = `Cambiar a modo ${nextTheme === 'dark' ? 'oscuro' : 'claro'}`;
+    const label = translate(`theme.toggle.${nextTheme}`);
+    const description = translate(`theme.description.${nextTheme}`);
     elements.themeToggle.textContent = label;
     elements.themeToggle.setAttribute('aria-label', description);
     elements.themeToggle.setAttribute('title', description);
@@ -115,7 +381,7 @@ function switchView(view) {
 async function fetchJSON(url, options = {}) {
     const response = await fetch(url, options);
     if (!response.ok) {
-        let message = `Error ${response.status}`;
+        let message = translate('errors.httpStatus', { status: response.status });
         try {
             const data = await response.json();
             if (data.error) message = data.error;
@@ -143,9 +409,11 @@ function renderDeckList() {
     elements.deckGrid.innerHTML = '';
 
     state.decks.forEach((deck) => {
-        const cardCountText = deck.cardCount === 1 ? '1 tarjeta' : `${deck.cardCount} tarjetas`;
+        const cardCountText = translate('deck.cardCount', { count: deck.cardCount });
         const pendingPoints = typeof deck.pendingPoints === 'number' ? deck.pendingPoints : 0;
-        const pendingText = pendingPoints === 1 ? '1 punto pendiente' : `${pendingPoints} puntos pendientes`;
+        const pendingText = translate('deck.pendingPoints', { count: pendingPoints });
+        const viewLabel = translate('deck.actions.view');
+        const deleteLabel = translate('deck.actions.delete');
         const card = document.createElement('article');
         card.className = 'deck-card';
         card.innerHTML = `
@@ -157,8 +425,8 @@ function renderDeckList() {
                 </div>
             </div>
             <div class="card-actions">
-                <button class="ghost" data-action="view" data-id="${deck.id}">👁️ Ver</button>
-                <button class="danger" data-action="delete" data-id="${deck.id}">Eliminar</button>
+                <button class="ghost" data-action="view" data-id="${deck.id}">${viewLabel}</button>
+                <button class="danger" data-action="delete" data-id="${deck.id}">${deleteLabel}</button>
             </div>
         `;
         elements.deckGrid.appendChild(card);
@@ -198,7 +466,10 @@ function currentCard() {
 function updateSessionSubtitle() {
     if (!state.session) return;
     const negatives = state.session.cards.filter((card) => card.aciertos < 0).length;
-    const roundLabel = negatives > 0 ? `Revisión de negativos (${negatives})` : `Recorrido ${state.session.round}`;
+    const roundLabel =
+        negatives > 0
+            ? translate('session.negativeReview', { count: negatives })
+            : translate('session.roundLabel', { round: state.session.round });
     elements.sessionSubtitle.textContent = roundLabel;
 }
 
@@ -214,7 +485,7 @@ function renderCard(card) {
         `;
         elements.cardContent.appendChild(field);
     });
-    elements.cardScore.textContent = `Aciertos: ${card.aciertos}`;
+    elements.cardScore.textContent = translate('session.score', { score: card.aciertos });
 }
 
 function renderSession() {
@@ -231,7 +502,7 @@ function renderSession() {
         elements.cardView.classList.add('hidden');
         elements.sessionActions.classList.add('hidden');
         elements.sessionMessage.classList.remove('hidden');
-        elements.sessionMessage.textContent = '¡Recorrido completado! No quedan tarjetas pendientes.';
+        elements.sessionMessage.textContent = translate('session.completed');
         return;
     }
 
@@ -240,7 +511,10 @@ function renderSession() {
     elements.sessionActions.classList.remove('hidden');
     elements.markCorrect.disabled = false;
     elements.markIncorrect.disabled = false;
-    elements.cardStep.textContent = `Tarjeta ${session.index + 1} de ${session.roundCards.length}`;
+    elements.cardStep.textContent = translate('session.step', {
+        index: session.index + 1,
+        total: session.roundCards.length,
+    });
     renderCard(card);
 }
 
@@ -252,7 +526,7 @@ async function handleDeckAction(event) {
         const deck = await fetchJSON(`/api/decks/${id}`);
         startSession(deck);
     } else if (action === 'delete') {
-        if (!confirm('¿Eliminar este mazo? Esta acción no se puede deshacer.')) return;
+        if (!confirm(translate('deck.actions.confirmDelete'))) return;
         await fetchJSON(`/api/decks/${id}`, { method: 'DELETE' });
         await loadDecks();
     }
@@ -267,7 +541,7 @@ function advanceSession() {
         if (negatives.length === 0) {
             session.finished = true;
             elements.sessionMessage.classList.remove('hidden');
-            elements.sessionMessage.textContent = '¡Bien hecho! Todas las tarjetas están en positivo.';
+            elements.sessionMessage.textContent = translate('session.allPositive');
             elements.cardView.classList.add('hidden');
             elements.sessionActions.classList.add('hidden');
             return;
@@ -482,10 +756,17 @@ function setupEventListeners() {
         });
     }
 
+    if (elements.languageToggle) {
+        elements.languageToggle.addEventListener('click', () => {
+            const next = state.language === 'es' ? 'en' : 'es';
+            applyLanguage(next);
+        });
+    }
+
     elements.deckForm.addEventListener('submit', async (event) => {
         event.preventDefault();
         const formData = new FormData(elements.deckForm);
-        elements.deckFormFeedback.textContent = 'Subiendo mazo...';
+        elements.deckFormFeedback.textContent = translate('deckForm.uploading');
         try {
             const data = await fetchJSON('/api/decks', {
                 method: 'POST',
@@ -493,7 +774,7 @@ function setupEventListeners() {
             });
             state.decks.push(data.deck);
             renderDeckList();
-            elements.deckFormFeedback.textContent = 'Mazo creado con éxito';
+            elements.deckFormFeedback.textContent = translate('deckForm.success');
             setTimeout(() => toggleOverlay(false), 800);
         } catch (error) {
             elements.deckFormFeedback.textContent = error.message;
@@ -502,10 +783,15 @@ function setupEventListeners() {
 }
 
 function init() {
+    const storedLanguage = getStoredLanguage();
+    const initialLanguage = storedLanguage || document.documentElement.lang || 'es';
+    applyLanguage(initialLanguage);
     initTheme();
     setupEventListeners();
     loadDecks().catch((error) => {
-        elements.deckGrid.innerHTML = `<p>Error al cargar mazos: ${error.message}</p>`;
+        const message = translate('deck.loadError', { message: error.message });
+        elements.deckGrid.textContent = message;
+        elements.deckEmpty.classList.add('hidden');
     });
 }
 
