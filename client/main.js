@@ -203,20 +203,31 @@ const LANGUAGE_STORAGE_KEY = 'language-preference';
 const THEME_STORAGE_KEY = 'theme-preference';
 
 function getStoredLanguage() {
-    try {
-        const stored = localStorage.getItem(LANGUAGE_STORAGE_KEY);
-        return stored === 'es' || stored === 'en' ? stored : null;
-    } catch (error) {
+    if (typeof localStorage === 'undefined') {
         return null;
     }
+    try {
+        const stored = localStorage.getItem(LANGUAGE_STORAGE_KEY);
+        if (stored === 'es' || stored === 'en') {
+            return stored;
+        }
+    } catch (error) {
+        // ignore storage access errors
+    }
+    return null;
 }
 
 function storeLanguage(language) {
+    if (typeof localStorage === 'undefined') {
+        return;
+    }
+    if (language !== 'es' && language !== 'en') {
+        return;
+    }
     try {
-        const normalized = language === 'en' ? 'en' : 'es';
-        localStorage.setItem(LANGUAGE_STORAGE_KEY, normalized);
+        localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
     } catch (error) {
-        // ignore storage errors
+        // ignore storage access errors
     }
 }
 
@@ -264,20 +275,23 @@ function translate(key, params = {}) {
     return value;
 }
 
+const I18N_ATTRIBUTE_PREFIX = 'data-i18n-attr-';
+const ATTRIBUTE_NAME_PATTERN = /^[A-Za-z_][\w:.-]*$/;
+
 function applyI18nAttributes(element) {
-    Object.entries(element.dataset).forEach(([name, key]) => {
-        if (!name.startsWith('i18nAttr')) return;
-        const attributeName = name.slice('i18nAttr'.length);
-        if (!attributeName) return;
-        const normalized = `${attributeName[0].toLowerCase()}${attributeName
-            .slice(1)
-            .replace(/([A-Z])/g, '-$1')
-            .toLowerCase()}`;
-        const translation = translate(key);
-        if (translation !== undefined) {
-            element.setAttribute(normalized, translation);
-        }
-    });
+    element
+        .getAttributeNames()
+        .filter((name) => name.startsWith(I18N_ATTRIBUTE_PREFIX))
+        .forEach((dataAttribute) => {
+            const attributeName = dataAttribute.slice(I18N_ATTRIBUTE_PREFIX.length).trim();
+            if (!attributeName || !ATTRIBUTE_NAME_PATTERN.test(attributeName)) return;
+            const key = element.getAttribute(dataAttribute);
+            if (!key) return;
+            const translation = translate(key);
+            if (translation !== undefined) {
+                element.setAttribute(attributeName, translation);
+            }
+        });
 }
 
 function applyStaticTranslations() {
@@ -332,20 +346,31 @@ function applyLanguage(language) {
 }
 
 function getStoredTheme() {
-    try {
-        const stored = localStorage.getItem(THEME_STORAGE_KEY);
-        return stored === 'light' || stored === 'dark' ? stored : null;
-    } catch (error) {
+    if (typeof localStorage === 'undefined') {
         return null;
     }
+    try {
+        const stored = localStorage.getItem(THEME_STORAGE_KEY);
+        if (stored === 'light' || stored === 'dark') {
+            return stored;
+        }
+    } catch (error) {
+        // ignore storage access errors
+    }
+    return null;
 }
 
 function storeTheme(theme) {
+    if (typeof localStorage === 'undefined') {
+        return;
+    }
+    if (theme !== 'light' && theme !== 'dark') {
+        return;
+    }
     try {
-        const normalized = theme === 'light' ? 'light' : 'dark';
-        localStorage.setItem(THEME_STORAGE_KEY, normalized);
+        localStorage.setItem(THEME_STORAGE_KEY, theme);
     } catch (error) {
-        // ignore storage errors
+        // ignore storage access errors
     }
 }
 
@@ -831,17 +856,25 @@ function setupEventListeners() {
     });
 }
 
-function init() {
+async function init() {
     const storedLanguage = getStoredLanguage();
     const initialLanguage = storedLanguage || document.documentElement.lang || 'es';
     applyLanguage(initialLanguage);
     initTheme();
     setupEventListeners();
-    loadDecks().catch((error) => {
+    try {
+        await loadDecks();
+    } catch (error) {
         const message = translate('deck.loadError', { message: error.message });
         elements.deckGrid.textContent = message;
         elements.deckEmpty.classList.add('hidden');
-    });
+    }
 }
 
-init();
+const isTestEnvironment = typeof window !== 'undefined' && window.__LERNDEUTSH_TEST__;
+
+if (!isTestEnvironment) {
+    init();
+}
+
+export { applyI18nAttributes, applyLanguage, applyTheme, init, translate, updateLanguageToggle, LANGUAGE_STORAGE_KEY, THEME_STORAGE_KEY };
