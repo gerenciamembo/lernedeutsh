@@ -269,7 +269,10 @@ function applyI18nAttributes(element) {
         if (!name.startsWith('i18nAttr')) return;
         const attributeName = name.slice('i18nAttr'.length);
         if (!attributeName) return;
-        const normalized = attributeName.replace(/([A-Z])/g, '-$1').toLowerCase();
+        const normalized = `${attributeName[0].toLowerCase()}${attributeName
+            .slice(1)
+            .replace(/([A-Z])/g, '-$1')
+            .toLowerCase()}`;
         const translation = translate(key);
         if (translation !== undefined) {
             element.setAttribute(normalized, translation);
