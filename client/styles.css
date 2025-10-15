@@ -30,6 +30,9 @@
     --card-border: rgba(79, 70, 229, 0.35);
     --card-shadow: 0 30px 60px -35px rgba(79, 70, 229, 0.45);
     --card-field-bg: rgba(15, 23, 42, 0.55);
+    --card-flash-bg: linear-gradient(160deg, rgba(99, 102, 241, 0.48), rgba(15, 23, 42, 0.85));
+    --card-flash-border: rgba(129, 140, 248, 0.7);
+    --card-flash-shadow: 0 35px 70px -35px rgba(129, 140, 248, 0.6);
     --overlay-bg: rgba(15, 23, 42, 0.65);
     --overlay-content-bg: rgba(15, 23, 42, 0.95);
     --overlay-content-border: rgba(148, 163, 184, 0.25);
@@ -68,6 +71,9 @@
     --card-border: rgba(79, 70, 229, 0.25);
     --card-shadow: 0 25px 60px -35px rgba(79, 70, 229, 0.35);
     --card-field-bg: rgba(79, 70, 229, 0.04);
+    --card-flash-bg: linear-gradient(160deg, rgba(129, 140, 248, 0.35), rgba(255, 255, 255, 0.95));
+    --card-flash-border: rgba(99, 102, 241, 0.6);
+    --card-flash-shadow: 0 30px 60px -35px rgba(129, 140, 248, 0.5);
     --overlay-bg: rgba(15, 23, 42, 0.35);
     --overlay-content-bg: #ffffff;
     --overlay-content-border: rgba(148, 163, 184, 0.3);
@@ -327,6 +333,24 @@ body {
     cursor: grab;
     user-select: none;
     touch-action: pan-y;
+}
+
+.card.card-flash {
+    animation: card-flash 0.55s ease;
+    animation-fill-mode: both;
+}
+
+@keyframes card-flash {
+    0% {
+        background: var(--card-flash-bg);
+        border-color: var(--card-flash-border);
+        box-shadow: var(--card-flash-shadow);
+    }
+    100% {
+        background: var(--card-bg);
+        border-color: var(--card-border);
+        box-shadow: var(--card-shadow);
+    }
 }
 
 .card.dragging {

@@ -86,17 +86,41 @@ def find_deck(deck_id: str) -> Tuple[Optional[Dict[str, Any]], List[Dict[str, An
     return None, decks
 
 
+def _normalise_score(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
 def calculate_pending_points(deck: Dict[str, Any]) -> int:
     cards = deck.get("cards", [])
     total = 0
     for card in cards:
-        try:
-            score = int(card.get("aciertos", 0))
-        except (TypeError, ValueError):
-            score = 0
+        score = _normalise_score(card.get("aciertos", 0))
         if score < 0:
             total += -score
     return total
+
+
+def calculate_card_progress(deck: Dict[str, Any]) -> Dict[str, int]:
+    cards = deck.get("cards", [])
+    reviewed = 0
+    success = 0
+    to_review = 0
+    for card in cards:
+        score = _normalise_score(card.get("aciertos", 0))
+        if score > 0:
+            success += 1
+            reviewed += 1
+        elif score < 0:
+            to_review += 1
+            reviewed += 1
+    return {
+        "reviewedCount": reviewed,
+        "successCount": success,
+        "toReviewCount": to_review,
+    }
 
 
 SPREADSHEET_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
@@ -510,6 +534,7 @@ class DeckHandler(SimpleHTTPRequestHandler):
                     "name": deck["name"],
                     "cardCount": len(deck.get("cards", [])),
                     "pendingPoints": calculate_pending_points(deck),
+                    **calculate_card_progress(deck),
                 }
                 for deck in decks
             ]
@@ -566,6 +591,7 @@ class DeckHandler(SimpleHTTPRequestHandler):
         }
         decks.append(deck)
         save_decks(decks)
+        progress = calculate_card_progress(deck)
         self.send_json({
             "message": "Mazo creado",
             "deck": {
@@ -573,6 +599,7 @@ class DeckHandler(SimpleHTTPRequestHandler):
                 "name": deck["name"],
                 "cardCount": len(cards),
                 "pendingPoints": calculate_pending_points(deck),
+                **progress,
             },
         }, status=201)
 
@@ -623,6 +650,7 @@ class DeckHandler(SimpleHTTPRequestHandler):
             "name": deck["name"],
             "cardCount": len(deck.get("cards", [])),
             "pendingPoints": calculate_pending_points(deck),
+            **calculate_card_progress(deck),
         }
         self.send_json({"card": card, "deck": updated_deck})
 
