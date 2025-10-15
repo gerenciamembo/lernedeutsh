@@ -12,6 +12,7 @@ const dragState = {
     deltaX: 0,
 };
 const DRAG_THRESHOLD_RATIO = 0.28;
+let lastRenderedCardId = null;
 
 const elements = {
     deckGrid: document.getElementById('deck-grid'),
@@ -40,6 +41,14 @@ const elements = {
     markIncorrect: document.getElementById('mark-incorrect'),
 };
 
+if (elements.cardView) {
+    elements.cardView.addEventListener('animationend', (event) => {
+        if (event.animationName === 'card-flash') {
+            elements.cardView.classList.remove('card-flash');
+        }
+    });
+}
+
 const translations = {
     es: {
         app: {
@@ -57,6 +66,8 @@ const translations = {
             emptyDescription: 'Comienza creando uno nuevo con el botón “Agregar mazo”.',
             cardCount: ({ count }) => (count === 1 ? '1 tarjeta' : `${count} tarjetas`),
             pendingPoints: ({ count }) => (count === 1 ? '1 punto pendiente' : `${count} puntos pendientes`),
+            progressSummary: ({ total, reviewed, success, toReview }) =>
+                `De ${total} cartas has revisado ${reviewed}, con ${success} exitosas y ${toReview} por repasar`,
             loadError: ({ message }) => `Error al cargar mazos: ${message}`,
             actions: {
                 view: '👁️ Ver',
@@ -129,6 +140,8 @@ const translations = {
             emptyDescription: 'Create a new one using the “Add deck” button.',
             cardCount: ({ count }) => (count === 1 ? '1 card' : `${count} cards`),
             pendingPoints: ({ count }) => (count === 1 ? '1 pending point' : `${count} pending points`),
+            progressSummary: ({ total, reviewed, success, toReview }) =>
+                `Out of ${total} cards you have reviewed ${reviewed}, with ${success} successes and ${toReview} to review`,
             loadError: ({ message }) => `Error loading decks: ${message}`,
             actions: {
                 view: '👁️ View',
@@ -205,6 +218,11 @@ function storeLanguage(language) {
     } catch (error) {
         // ignore storage errors
     }
+}
+
+function normaliseScore(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : 0;
 }
 
 function getTranslationValue(language, pathParts) {
@@ -409,7 +427,13 @@ function renderDeckList() {
     elements.deckGrid.innerHTML = '';
 
     state.decks.forEach((deck) => {
-        const cardCountText = translate('deck.cardCount', { count: deck.cardCount });
+        const totals = {
+            total: typeof deck.cardCount === 'number' ? deck.cardCount : 0,
+            reviewed: typeof deck.reviewedCount === 'number' ? deck.reviewedCount : 0,
+            success: typeof deck.successCount === 'number' ? deck.successCount : 0,
+            toReview: typeof deck.toReviewCount === 'number' ? deck.toReviewCount : 0,
+        };
+        const progressText = translate('deck.progressSummary', totals);
         const pendingPoints = typeof deck.pendingPoints === 'number' ? deck.pendingPoints : 0;
         const pendingText = translate('deck.pendingPoints', { count: pendingPoints });
         const viewLabel = translate('deck.actions.view');
@@ -420,7 +444,7 @@ function renderDeckList() {
             <div>
                 <h3>${deck.name}</h3>
                 <div class="deck-stats">
-                    <span>${cardCountText}</span>
+                    <span>${progressText}</span>
                     <span>${pendingText}</span>
                 </div>
             </div>
@@ -442,9 +466,21 @@ function shuffle(array) {
     return copy;
 }
 
+function buildRoundCards(cards, { prioritizeNegative = false } = {}) {
+    const shuffled = shuffle(cards);
+    if (!prioritizeNegative) return shuffled;
+    const negativeIndex = shuffled.findIndex((card) => normaliseScore(card.aciertos) < 0);
+    if (negativeIndex > 0) {
+        const [negativeCard] = shuffled.splice(negativeIndex, 1);
+        shuffled.unshift(negativeCard);
+    }
+    return shuffled;
+}
+
 function startSession(deck) {
     const cards = deck.cards.map((card) => ({ ...card, contenido: { ...card.contenido } }));
-    const roundCards = shuffle(cards);
+    const roundCards = buildRoundCards(cards, { prioritizeNegative: true });
+    lastRenderedCardId = null;
     state.session = {
         deckId: deck.id,
         deckName: deck.name,
@@ -465,7 +501,7 @@ function currentCard() {
 
 function updateSessionSubtitle() {
     if (!state.session) return;
-    const negatives = state.session.cards.filter((card) => card.aciertos < 0).length;
+    const negatives = state.session.cards.filter((card) => normaliseScore(card.aciertos) < 0).length;
     const roundLabel =
         negatives > 0
             ? translate('session.negativeReview', { count: negatives })
@@ -474,6 +510,7 @@ function updateSessionSubtitle() {
 }
 
 function renderCard(card) {
+    const cardElement = elements.cardView;
     elements.cardContent.innerHTML = '';
     Object.entries(card.contenido).forEach(([key, value]) => {
         const displayValue = typeof value === 'object' ? JSON.stringify(value) : value;
@@ -486,6 +523,13 @@ function renderCard(card) {
         elements.cardContent.appendChild(field);
     });
     elements.cardScore.textContent = translate('session.score', { score: card.aciertos });
+    if (cardElement && lastRenderedCardId !== card.id) {
+        cardElement.classList.remove('card-flash');
+        // Force reflow so the animation restarts when the class is added again
+        void cardElement.offsetWidth; // eslint-disable-line no-void
+        cardElement.classList.add('card-flash');
+        lastRenderedCardId = card.id;
+    }
 }
 
 function renderSession() {
@@ -499,6 +543,7 @@ function renderSession() {
     const card = currentCard();
     if (!card) {
         session.finished = true;
+        lastRenderedCardId = null;
         elements.cardView.classList.add('hidden');
         elements.sessionActions.classList.add('hidden');
         elements.sessionMessage.classList.remove('hidden');
@@ -537,7 +582,7 @@ function advanceSession() {
     if (!session) return;
     session.index += 1;
     if (session.index >= session.roundCards.length) {
-        const negatives = session.cards.filter((card) => card.aciertos < 0);
+        const negatives = session.cards.filter((card) => normaliseScore(card.aciertos) < 0);
         if (negatives.length === 0) {
             session.finished = true;
             elements.sessionMessage.classList.remove('hidden');
@@ -547,7 +592,7 @@ function advanceSession() {
             return;
         }
         session.round += 1;
-        session.roundCards = shuffle(negatives);
+        session.roundCards = buildRoundCards(negatives, { prioritizeNegative: true });
         session.index = 0;
     }
     renderSession();
@@ -598,6 +643,7 @@ function exitSession() {
     interactionLocked = false;
     dragState.active = false;
     dragState.pointerId = null;
+    lastRenderedCardId = null;
     state.session = null;
     switchView('list');
     loadDecks();
